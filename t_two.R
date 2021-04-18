@@ -2,17 +2,48 @@ data("mtcars")
 library(ggplot2)
 library(pwr)
 d<-mtcars
-x<-d$mpg
-tt<-t.test(d$mpg)
-View(tt)
+y<-d$mpg
+x<-d$am
+t_two <- function(x,y, m0 = 0, alpha = 0.05, 
+                  alternative = "two.sided",
+                  equal.variance =FALSE) {
+summary<-
+  aggregate(y, 
+          by = list(x), 
+          function(x) c(
+    M =  round(mean(x),2),
+    V = round(var(x),2),
+    SD = round(sd(x),2),
+    n = length(x),
+    df = length(x)-1
+    ))
+dat<-as.data.frame(summary$x) 
+M1<- dat$M[1]
+M2<- dat$M[2]
+v1<- dat$V[1]
+v2<- dat$V[2]
+n1<- dat$n[1]
+n2<- dat$n[2]
 
-t.test2 <- function(x, m0 = 0, alpha = 0.05, 
-                    alternative = "two.sided") {
-  M <- mean(x) # moyenne
-  df <- length(x)-1 # degre de liberte
-  V <- var(x) #  variance
-  S <- sqrt(V / df) # erreur standard
-  t_observed <- (M - m0) / S #  t observe
+
+if( equal.variance==FALSE ) 
+{
+  S <- sqrt( (v1/n1) + (v2/n2) )
+  # welch-satterthwaite df
+  df <- ( (v1/n1 + v2/n2)^2 )/( (v1/n1)^2/(n1-1) + (v2/n2)^2/(n2-1) )
+} else
+{
+  # pooled standard deviation, scaled by the sample sizes
+  S <- sqrt( (1/n1 + 1/n2) * ((n1-1)*v1 + (n2-1)*v2)/(n1+n2-2) ) 
+  df <- n1+n2-2
+}
+# Difference de moyenne
+Mdiff <- M1-M2 
+# intervalle de confiance autour des moyennes
+LCL = (Mdiff  - S * qnorm(1 - alpha / 2))
+UCL  = (Mdiff  + S * qnorm(1 - alpha / 2))
+
+t_observed <- (Mdiff - m0) / S #  t observe
   p <- if (alternative == "two.sided") {
     2 * pnorm(abs(t_observed), lower.tail = FALSE)
   } else if (alternative == "less") {
@@ -21,7 +52,7 @@ t.test2 <- function(x, m0 = 0, alpha = 0.05,
     pnorm(t_observed, lower.tail = FALSE)
   }
   
-  t_critical <- if (alternative == "two.sided") { # t critique
+t_critical <- if (alternative == "two.sided") { # t critique
     qt(alpha/2, df, lower.tail=FALSE)
   } else if (alternative == "less") {
     qt(alpha, df, lower.tail=TRUE)
@@ -29,11 +60,7 @@ t.test2 <- function(x, m0 = 0, alpha = 0.05,
     qt(alpha, df, lower.tail=FALSE)
   }
   
-  # intervalle de confiance autour de la moyenne
-  LCL <- (M - S * qnorm(1 - alpha / 2)) # limite inferieure
-  UCL <- (M + S * qnorm(1 - alpha / 2)) # limite superieure
-  
-  d_cohen <- (M - m0)/sqrt(V) # d de cohen
+# d_cohen <- (Mdiff - m0)/sqrt(V) # d de cohen
   power_posthoc<-pwr.t.test(n = length(x), d = d_cohen, sig.level = alpha,
              type = "one.sample") # post hoc power
   power<-power_posthoc$power
@@ -70,7 +97,11 @@ t.test2 <- function(x, m0 = 0, alpha = 0.05,
                           round(max(rst),2),
                           " (cutoff = ", round(alpha_rst,2),")"))
   
-  
+   qqnorm(residuals(linear_model), ylab="Residuals",
+          col = "blue")
+   qqline(residuals(linear_model))
+   qqplot<-recordPlot()
+   
   mini<-ifelse(t_observed > 0, -5, -5 + t_observed)
   maxi<-ifelse(t_observed < 0, 5, 5 + t_observed)
   t_plot<-
@@ -90,6 +121,17 @@ t.test2 <- function(x, m0 = 0, alpha = 0.05,
          subtitle = paste("critical t = ",round(t_critical,3),
                           " + observed t = ", round(t_observed,3)))+
     theme_classic(base_size = 12)
+  
+  
+  result <- paste0("t(", df,") = ",
+                   round(t_observed,2),
+                   ", p = ", format.pval(p),
+                   ", d = ", round(d_cohen,2),
+                   ", M = ", round(M,2),
+                   ", 95% CI [", round(LCL,2),
+                   "; ", round(UCL,2),
+                   "], SD = ", round(sqrt(V),2))
+  
   value <- list(mean = M, # liste des valeurs a imprimer
                 m0 = m0, 
                 variance = V,
@@ -103,10 +145,17 @@ t.test2 <- function(x, m0 = 0, alpha = 0.05,
                 p.value = p, 
                 LCL = LCL, 
                 UCL = UCL, 
-                t_plot = t_plot,
+                qqplot = qqplot,
                 boxplot = boxplot,
+                t_plot = t_plot,
                 cohens_d = d_cohen,
-                alternative = alternative)
+                alternative = alternative,
+                result = result)
+
+
+                  
+  
+  
   # print(sprintf("P-value = %g",p))
   # print(sprintf("Lower %.2f%% Confidence Limit = %g",
   #               alpha, LCL))
@@ -115,6 +164,6 @@ t.test2 <- function(x, m0 = 0, alpha = 0.05,
   return(value)
 }
 
-t.test2(d$mpg)
-t.test2(mtcars$disp)
-test
+t_one(d$mpg)
+t_one(mtcars$disp)
+
