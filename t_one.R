@@ -46,55 +46,63 @@ t_one <- function(y, m0 = 0, alpha = 0.05,
   # outlierTest(linear_model)
   alpha_rst = qt(1-alpha / length(y), df)
   outlier<-data.frame(dv = y, rst = abs(rst))
-  outlier$col <- ifelse(rst<abs(alpha_rst), "green", "red")
-
+  outlier$col <- ifelse(rst<abs(alpha_rst), "grey50", "black")
+  
    boxplot <-
     ggplot(outlier, 
          aes(y = dv,x = "",
              label = 1:nrow(outlier)),
          color = col) +
-      geom_boxplot(width = 0.2, col = "blue",
-                   outlier.shape = NA)+
-      geom_jitter(aes(col = col),width = 0.02)+
+     geom_boxplot(width = 0.2, col = "black",
+                  outlier.shape = NA)+
+     geom_jitter(aes(col = col),width = 0.03, alpha = 0.5,
+                 size = 2)+
       scale_color_identity()+
-    geom_hline(yintercept = M, lty = "dashed") +
-    geom_hline(yintercept = c(LCL, UCL), lty = "dotted") +
+     stat_summary(FUN = "mean", geom = "point", shape = 22, 
+                  fill = "black", size = 3)+
+    # geom_hline(yintercept = c(LCL, UCL), lty = "dotted") +
     guides(col = F)+
     theme_classic(base_size = 12)+
     labs(x = "boxplot",
          y = "raw data",
-         subtitle = paste("Boxplot + ",
-                          paste("M", "95%CI",
+         subtitle = paste("M", "95%CI",
                           sep = "\u00B1"),
                           "+ larger studentized residual = ",
                           round(max(rst),2),
-                          " (cutoff = ", round(alpha_rst,2),")"))
+                          " (cutoff = ", round(alpha_rst,2),")")
   
-   qqnorm(residuals(linear_model), ylab="Residuals",
-          col = "blue")
-   qqline(residuals(linear_model))
+   
+   plot(linear_model, which = 2,  bg = alpha("grey50", 0.5),pch = 21)
    qqplot<-recordPlot()
    
-  mini<-ifelse(t_observed > 0, -5, -5 + t_observed)
-  maxi<-ifelse(t_observed < 0, 5, 5 + t_observed)
+   mini<--5
+   maxi<-abs(t_observed) + 5
   
   t_plot<-
     ggplot(data.frame(x = c(mini, maxi)), aes(x)) +
     stat_function(fun = dt, args =list(df =df),
-                  xlim = c(direction*t_critical,4),
+                  xlim = c(abs(t_critical),4),
                   geom = "area", fill = "pink") +
+    # fill alpha area H0
     stat_function(fun = dt, args =list(df =df),
                   col = "red") +
-    stat_function(fun = dt, args =list(df =df, ncp = t_observed),
-                   col = "blue", lty = "dashed")+
+    # curve H0 
+    stat_function(fun = dt, args =list(df =df,ncp = abs(t_observed)),
+                  xlim = c(mini, abs(t_critical)),
+                  geom = "area", fill = alpha("blue",0.3))+
+    # fill alpha area non central distribution 
+    stat_function(fun = dt, args =list(df =df, ncp = abs(t_observed)),
+                  col = "blue", lty = "dashed")+
+    # curve alpha area non central distribution 
     geom_vline(xintercept = t_critical,
-               col = "green")+
-    geom_vline(xintercept = t_observed,
+               col = "green2")+
+    geom_vline(xintercept = abs(t_observed),
                col = "blue")+
     labs(x = "t", y = "", 
          subtitle = paste("critical t = ",round(t_critical,3),
                           " + observed t = ", round(t_observed,3)))+
-    theme_classic(base_size = 12)
+    theme_classic(base_size = 12)+
+    theme(panel.background = element_rect(fill = "grey95"))
   
   
   result <- paste0("t(", df,") = ",
@@ -126,15 +134,6 @@ t_one <- function(y, m0 = 0, alpha = 0.05,
                 alternative = alternative,
                 result = result)
 
-
-                  
-  
-  
-  # print(sprintf("P-value = %g",p))
-  # print(sprintf("Lower %.2f%% Confidence Limit = %g",
-  #               alpha, LCL))
-  # print(sprintf("Upper %.2f%% Confidence Limit = %g",
-  #               alpha, UCL))
   return(value)
 }
 

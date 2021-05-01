@@ -1,12 +1,16 @@
 data("mtcars")
+library(tidyverse)
 library(ggplot2)
 library(pwr)
+library(MESS)
 d<-mtcars
 y<-d$mpg
 x<-d$am
 t_two <- function(x,y, m0 = 0, alpha = 0.05, 
                   alternative = "two.sided",
-                  equal.variance =FALSE) {
+                  equal.variance = FALSE) {
+  
+  xf<-as.factor(x)
 summary<-
   aggregate(y, 
           by = list(x), 
@@ -17,28 +21,36 @@ summary<-
     n = length(x),
     df = length(x)-1
     ))
-dat<-as.data.frame(summary$x) 
-M1<- dat$M[1]
+dat<-as.data.frame(summary$x)
+
+dat$mod<-levels(xf)
+M1<- dat$M[1] # mean
 M2<- dat$M[2]
-v1<- dat$V[1]
+v1<- dat$V[1] # variance
 v2<- dat$V[2]
-n1<- dat$n[1]
+n1<- dat$n[1] # size
 n2<- dat$n[2]
 
+Sp <- sqrt( (1/n1 + 1/n2) * ((n1-1)*v1 + (n2-1)*v2)/(n1+n2-2) )
+# pooled standard deviation
+dfp <- n1+n2-2
+# pooled df (var equal is true)
 
-if( equal.variance==FALSE ) 
+if(equal.variance==FALSE) 
 {
-  S <- sqrt( (v1/n1) + (v2/n2) )
+  S <- sqrt( (v1/n1) + (v2/n2) ) # standard error
   # welch-satterthwaite df
   df <- ( (v1/n1 + v2/n2)^2 )/( (v1/n1)^2/(n1-1) + (v2/n2)^2/(n2-1) )
 } else
 {
   # pooled standard deviation, scaled by the sample sizes
-  S <- sqrt( (1/n1 + 1/n2) * ((n1-1)*v1 + (n2-1)*v2)/(n1+n2-2) ) 
-  df <- n1+n2-2
+  S <- Sp
+  df <- dfp
 }
 # Difference de moyenne
 Mdiff <- M1-M2 
+# Cohen d 
+d_cohen<-Mdiff/(sqrt(Sp/dfp))
 # intervalle de confiance autour des moyennes
 LCL = (Mdiff  - S * qnorm(1 - alpha / 2))
 UCL  = (Mdiff  + S * qnorm(1 - alpha / 2))
@@ -59,83 +71,109 @@ t_critical <- if (alternative == "two.sided") { # t critique
   } else {
     qt(alpha, df, lower.tail=FALSE)
   }
-  
-# d_cohen <- (Mdiff - m0)/sqrt(V) # d de cohen
-  power_posthoc<-pwr.t.test(n = length(x), d = d_cohen, sig.level = alpha,
-             type = "one.sample") # post hoc power
-  power<-power_posthoc$power
-  direction<-sign(t_observed) # direction du t observe
-  
-  linear_model<- lm(x ~ 1) 
-  # modele lineaire utile pour detecter valeurs extremes
-  rst<-rstudent(linear_model)
-  # library(car)
-  # outlierTest(linear_model)
-  alpha_rst = qt(1-alpha / length(x), df)
-  outlier<-data.frame(dv = x, rst = abs(rst))
-  outlier$col <- ifelse(rst<abs(alpha_rst), "green", "red")
 
-   boxplot <-
-    ggplot(outlier, 
-         aes(y = dv,x = "",
-             label = 1:nrow(outlier)),
+# post hoc power
+xt<-table(xf)
+
+power0<-
+MESS::power_t_test(n=min(table(xf)), 
+                   sd = Sp, 
+                   power=NULL, 
+                   ratio=max(xt)/min(xt), 
+                   sd.ratio= max(dat$V)/min(dat$V), 
+                   delta=Mdiff)
+# post hoc power
+power<-power0$power
+
+# direction du t observe
+direction<-sign(t_observed) 
+  
+linear_model<- lm(y ~ xf) 
+# modele lineaire utile pour detecter valeurs extremes
+rst<-rstudent(linear_model)
+alpha_rst = qt(1-alpha / length(x), sum(dat$n))
+outlier<-data.frame(dv = y, iv = xf, rst = abs(rst))
+outlier$col <- ifelse(rst<abs(alpha_rst), "grey50", "black")
+
+ boxplot <-
+ggplot(outlier, 
+         aes(y = dv,x = iv,label = 1:nrow(outlier)),
          color = col) +
-      geom_boxplot(width = 0.2, col = "blue",
+    geom_boxplot(width = 0.2, col = "black",
                    outlier.shape = NA)+
-      geom_jitter(aes(col = col),width = 0.02)+
-      scale_color_identity()+
-    geom_hline(yintercept = M, lty = "dashed") +
-    geom_hline(yintercept = c(LCL, UCL), lty = "dotted") +
+    geom_jitter(aes(col = col),width = 0.03, alpha = 0.5,
+                size = 2)+
+    scale_color_identity()+
+    geom_hline(yintercept = mean(dat$M), lty = "dashed") +
+    stat_summary(FUN = "mean", geom = "point", shape = 22, 
+                 fill = "black", size = 3)+
     guides(col = F)+
     theme_classic(base_size = 12)+
     labs(x = "boxplot",
          y = "raw data",
-         subtitle = paste("Boxplot + ",
-                          paste("M", "95%CI",
+         subtitle = paste("M=",
+                          paste(round(Mdiff,1) ,round(S * qnorm(1 - alpha / 2),1),
                           sep = "\u00B1"),
                           "+ larger studentized residual = ",
                           round(max(rst),2),
                           " (cutoff = ", round(alpha_rst,2),")"))
-  
-   qqnorm(residuals(linear_model), ylab="Residuals",
-          col = "blue")
-   qqline(residuals(linear_model))
-   qqplot<-recordPlot()
    
-  mini<-ifelse(t_observed > 0, -5, -5 + t_observed)
-  maxi<-ifelse(t_observed < 0, 5, 5 + t_observed)
-  t_plot<-
+   
+   plot(linear_model, which = 2,  bg = alpha("grey50", 0.5),pch = 21)
+   qqplot<-recordPlot()
+   plot(linear_model, which = 3,  bg = alpha("grey50", 0.5),pch = 21)
+   varplot<-recordPlot()
+   
+  mini<--5
+  maxi<-abs(t_observed) + 5
+ t_plot <-
     ggplot(data.frame(x = c(mini, maxi)), aes(x)) +
     stat_function(fun = dt, args =list(df =df),
-                  xlim = c(direction*t_critical,4),
+                  xlim = c(abs(t_critical),4),
                   geom = "area", fill = "pink") +
+      # fill alpha area H0
     stat_function(fun = dt, args =list(df =df),
                   col = "red") +
-    stat_function(fun = dt, args =list(df =df, ncp = t_observed),
+      # curve H0 
+    stat_function(fun = dt, args =list(df =df,ncp = abs(t_observed)),
+                    xlim = c(mini, abs(t_critical)),
+                    geom = "area", fill = alpha("blue",0.3))+
+      # fill alpha area non central distribution 
+    stat_function(fun = dt, args =list(df =df, ncp = abs(t_observed)),
                    col = "blue", lty = "dashed")+
+      # curve alpha area non central distribution 
     geom_vline(xintercept = t_critical,
-               col = "green")+
-    geom_vline(xintercept = t_observed,
+               col = "green2")+
+    geom_vline(xintercept = abs(t_observed),
                col = "blue")+
     labs(x = "t", y = "", 
          subtitle = paste("critical t = ",round(t_critical,3),
-                          " + observed t = ", round(t_observed,3)))+
-    theme_classic(base_size = 12)
+                          " + observed t = ",abs(round(t_observed,3))))+
+    theme_classic(base_size = 12)+
+    theme(panel.background = element_rect(fill = "grey95"))
+      
   
-  
-  result <- paste0("t(", df,") = ",
+  cltxt <- function(lcl, ucl){
+    return(paste0("95% CI [", round(lcl,2),
+    "; ", round(ucl,2),"]"))
+  }
+  result <- paste0("t(", round(df,1),") = ",
                    round(t_observed,2),
-                   ", p = ", format.pval(p),
+                   ", p = ", format.pval(p, eps = 0.001),
                    ", d = ", round(d_cohen,2),
-                   ", M = ", round(M,2),
-                   ", 95% CI [", round(LCL,2),
-                   "; ", round(UCL,2),
-                   "], SD = ", round(sqrt(V),2))
+                   ", M = ", round(Mdiff,2),", ",
+                   cltxt(LCL, UCL)
+                   )
+MSD<-
+  dat %>% 
+  mutate(msd = paste0("Modality = ", mod, ", m=", M, ", sd=", SD, ", n=", n)) %>% 
+  select(msd)
+
   
-  value <- list(mean = M, # liste des valeurs a imprimer
-                m0 = m0, 
-                variance = V,
-                sd = sqrt(V),
+  value <- list(mean = Mdiff, # liste des valeurs a imprimer
+                LCL = LCL, 
+                UCL = UCL, 
+                m0 = m0,
                 df = df,
                 alpha = alpha,
                 beta = 1- power,
@@ -143,27 +181,19 @@ t_critical <- if (alternative == "two.sided") { # t critique
                 t_observed = t_observed,
                 t_critical = t_critical,
                 p.value = p, 
-                LCL = LCL, 
-                UCL = UCL, 
                 qqplot = qqplot,
+                varplot = varplot,
                 boxplot = boxplot,
                 t_plot = t_plot,
                 cohens_d = d_cohen,
                 alternative = alternative,
-                result = result)
+                result = result,
+                MSD = list(MSD))
 
-
-                  
-  
-  
-  # print(sprintf("P-value = %g",p))
-  # print(sprintf("Lower %.2f%% Confidence Limit = %g",
-  #               alpha, LCL))
-  # print(sprintf("Upper %.2f%% Confidence Limit = %g",
-  #               alpha, UCL))
   return(value)
 }
-
-t_one(d$mpg)
+args(t_two)
+t_two(y = d$disp, d$am)
+t_two(y = d$disp, d$am, equal.variance = T)
 t_one(mtcars$disp)
 
