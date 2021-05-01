@@ -45,8 +45,8 @@ t_one <- function(y, m0 = 0, alpha = 0.05,
   # library(car)
   # outlierTest(linear_model)
   alpha_rst = qt(1-alpha / length(y), df)
-  outlier<-data.frame(dv = y, rst = abs(rst))
-  outlier$col <- ifelse(rst<abs(alpha_rst), "grey50", "black")
+  outlier<-data.frame(dv = y, iv = xf, rst = abs(rst), cutoff = alpha_rst)
+  outlier$col <- ifelse(rst<abs(alpha_rst), "grey50", "red")
   
    boxplot <-
     ggplot(outlier, 
@@ -64,12 +64,7 @@ t_one <- function(y, m0 = 0, alpha = 0.05,
     guides(col = F)+
     theme_classic(base_size = 12)+
     labs(x = "boxplot",
-         y = "raw data",
-         subtitle = paste("M", "95%CI",
-                          sep = "\u00B1"),
-                          "+ larger studentized residual = ",
-                          round(max(rst),2),
-                          " (cutoff = ", round(alpha_rst,2),")")
+         y = "raw data")
   
    
    plot(linear_model, which = 2,  bg = alpha("grey50", 0.5),pch = 21)
@@ -113,7 +108,7 @@ t_one <- function(y, m0 = 0, alpha = 0.05,
                    ", 95% CI [", round(LCL,2),
                    "; ", round(UCL,2),
                    "], SD = ", round(sqrt(V),2))
-  
+  # value--------
   value <- list(mean = M, # liste des valeurs a imprimer
                 m0 = m0, 
                 variance = V,
@@ -129,6 +124,7 @@ t_one <- function(y, m0 = 0, alpha = 0.05,
                 UCL = UCL, 
                 qqplot = qqplot,
                 boxplot = boxplot,
+                outlier = list(studentized_residuals = filter(outlier, rst > alpha_rst)),
                 t_plot = t_plot,
                 cohens_d = d_cohen,
                 alternative = alternative,
@@ -137,6 +133,6 @@ t_one <- function(y, m0 = 0, alpha = 0.05,
   return(value)
 }
 
-t_one(d$mpg)
+t_one(y)
 t_one(mtcars$disp)
 

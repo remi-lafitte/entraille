@@ -5,6 +5,7 @@ library(pwr)
 library(MESS)
 d<-mtcars
 y<-d$mpg
+y[2] <- 115
 x<-d$am
 t_two <- function(x,y, m0 = 0, alpha = 0.05, 
                   alternative = "two.sided",
@@ -72,7 +73,7 @@ t_critical <- if (alternative == "two.sided") { # t critique
     qt(alpha, df, lower.tail=FALSE)
   }
 
-# post hoc power
+# post hoc power----
 xt<-table(xf)
 
 power0<-
@@ -84,7 +85,7 @@ MESS::power_t_test(n=min(table(xf)),
                    delta=Mdiff)
 # post hoc power
 power<-power0$power
-
+#----
 # direction du t observe
 direction<-sign(t_observed) 
   
@@ -92,8 +93,8 @@ linear_model<- lm(y ~ xf)
 # modele lineaire utile pour detecter valeurs extremes
 rst<-rstudent(linear_model)
 alpha_rst = qt(1-alpha / length(x), sum(dat$n))
-outlier<-data.frame(dv = y, iv = xf, rst = abs(rst))
-outlier$col <- ifelse(rst<abs(alpha_rst), "grey50", "black")
+outlier<-data.frame(dv = y, iv = xf, rst = abs(rst), cutoff = alpha_rst)
+outlier$col <- ifelse(rst<abs(alpha_rst), "grey50", "red")
 
  boxplot <-
 ggplot(outlier, 
@@ -104,19 +105,14 @@ ggplot(outlier,
     geom_jitter(aes(col = col),width = 0.03, alpha = 0.5,
                 size = 2)+
     scale_color_identity()+
-    geom_hline(yintercept = mean(dat$M), lty = "dashed") +
+    # scale_fill_identity()+
+   geom_hline(yintercept = mean(dat$M), lty = "dashed") +
     stat_summary(FUN = "mean", geom = "point", shape = 22, 
                  fill = "black", size = 3)+
     guides(col = F)+
     theme_classic(base_size = 12)+
     labs(x = "boxplot",
-         y = "raw data",
-         subtitle = paste("M=",
-                          paste(round(Mdiff,1) ,round(S * qnorm(1 - alpha / 2),1),
-                          sep = "\u00B1"),
-                          "+ larger studentized residual = ",
-                          round(max(rst),2),
-                          " (cutoff = ", round(alpha_rst,2),")"))
+         y = "raw data")
    
    
    plot(linear_model, which = 2,  bg = alpha("grey50", 0.5),pch = 21)
@@ -126,6 +122,7 @@ ggplot(outlier,
    
   mini<--5
   maxi<-abs(t_observed) + 5
+  # t plot-------
  t_plot <-
     ggplot(data.frame(x = c(mini, maxi)), aes(x)) +
     stat_function(fun = dt, args =list(df =df),
@@ -151,7 +148,7 @@ ggplot(outlier,
                           " + observed t = ",abs(round(t_observed,3))))+
     theme_classic(base_size = 12)+
     theme(panel.background = element_rect(fill = "grey95"))
-      
+  #-----    
   
   cltxt <- function(lcl, ucl){
     return(paste0("95% CI [", round(lcl,2),
@@ -170,7 +167,7 @@ MSD<-
   select(msd)
 
   
-  value <- list(mean = Mdiff, # liste des valeurs a imprimer
+  value <- list(mean_difference = Mdiff, # liste des valeurs a imprimer
                 LCL = LCL, 
                 UCL = UCL, 
                 m0 = m0,
@@ -184,6 +181,7 @@ MSD<-
                 qqplot = qqplot,
                 varplot = varplot,
                 boxplot = boxplot,
+                outlier = list(studentized_residuals = filter(outlier, rst > alpha_rst)),
                 t_plot = t_plot,
                 cohens_d = d_cohen,
                 alternative = alternative,
@@ -192,8 +190,8 @@ MSD<-
 
   return(value)
 }
-args(t_two)
-t_two(y = d$disp, d$am)
+# args(t_two)
+t_two(y = y, d$am)
 t_two(y = d$disp, d$am, equal.variance = T)
 t_one(mtcars$disp)
 
