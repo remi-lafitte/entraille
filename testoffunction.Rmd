@@ -1,0 +1,15 @@
+---
+title: "testoffunction"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("lm2.R")
+```
+
+```{r}
+lm2(data = mtcars, y = "mpg", 
+    inter = c("am", "disp", "am:disp")) 
+```
+
