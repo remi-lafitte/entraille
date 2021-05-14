@@ -11,31 +11,45 @@ library(tidyverse)
 #               6)
 
 # function---------------
-wdiff <- function(data,intra,inter,id,y){
+# Function within_contrast-----------------
+d<-data.frame(id = rep(1:4, 4),
+              a = c(rep(-0.5, 8), rep(0.5, 8)),
+              b = rep(c(rep(-0.5, 4), rep(0.5, 4)),2),
+              c = rep(runif(4),4),
+              m = runif(16)
+)
 
-  # 1) data preparation-------------
-data$id<-  d[, id]
+within_contrast <- 
+  function(data, 
+           within,
+           between = NULL,
+           id,
+           dv){
+    
+    myformula<-as.formula(paste0(dv, "~",within))
+    print(myformula)
+    tmp <- 
+      with(data,
+           by(data, id,
+              function(x) lm(myformula, data = x)))
+    
+    # print(tmp)
+    
+    output<-
+      if(is.null(between)){
+        data.frame(id = names(tmp), t(sapply(tmp, coef)))
+      }else{
+        data.frame(id = names(tmp), t(sapply(tmp, coef)),
+                   unique(data[between]))
+      }
+    colnames(output)[2]<-"intercept"
+    return(output)
+  }
+within_contrast(d, "a*b", "c", "id","m")
+within_contrast(d, "a+b", "c", "id","m")
+within_contrast(d, within = "a+b", id = "id", dv = "m")
+within_contrast(d, within = "a", id = "id", dv = "m")
 
-beta_list<-list()
-# list to fill with the individual beta coefficients for 
-# each within subject variable
-for(var in 1:length(intra)){
- varloop<-  intra[var]
-sub_beta_list<-list()
-  for(i in 1:max(d[, "id"])){
-  d2 <- data[data$id == i,]
-  beta<-lm(as.formula(paste(y, "~", varloop)), d2)
-  sub_beta_list[i]<-beta$coefficients[2]
-  }
-  d3<-data.frame(beta = do.call(rbind, args = sub_beta_list))
-  beta_list[intra[var]]<-list(d3)
-  }
-d4<-data.frame(beta = do.call(cbind, args = beta_list))
-d5<-cbind(d4, data[unique(data$id), inter], unique(data$id))
-colnames(d5)<- c(intra, inter, "subject")
-new_df <- d5
-return(new_df)
-}
 # 2) statistics------------
 lm2 <- function(data = NULL, inter = NULL, y = NULL){
   anova_list<-list()
